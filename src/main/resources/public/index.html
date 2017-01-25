@@ -7,10 +7,21 @@
 </head>
 <body>
 <div id="chatControls">
+    <div id="channelName"> <!-- Built by JS --> </div>
     <input id="message" autofocus="autofocus" placeholder="Type your message">
     <button id="send">Peace</button>
 </div>
-<ul id="userlist"> <!-- Built by JS --> </ul>
+<div id="rightPane">
+    <h4>Users</h4>
+    <ul id="userlist"> <!-- Built by JS --> </ul>
+</div>
+<div id="leftPane">
+    <h4>Channels</h4>
+    <ul id="channellist">
+        <li>Chatbot</li><!-- Built by JS -->
+        <li>Default</li>
+    </ul>
+</div>
 <div id="chat">    <!-- Built by JS --> </div>
 <script src="websocket.js"></script>
 </body>

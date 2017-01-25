@@ -7,7 +7,7 @@
 var webSocket = new WebSocket("ws://" + location.hostname + ":" + location.port + "/chat/");
 webSocket.onopen = function () {
     var username = prompt("Choose nick:", "Username");
-    webSocket.send()
+    webSocket.send("/newUser:" + username);
     // document.cookie = "username=" + username;
 };
 webSocket.onmessage = function (msg) {
@@ -40,6 +40,7 @@ function sendMessage(message) {
 //Update the chat-panel, and the list of connected users
 function updateChat(msg) {
     var data = JSON.parse(msg.data);
+    id("channelName").innerHTML = data.currentChannel;
     insert("chat", data.userMessage);
     id("userlist").innerHTML = "";
 

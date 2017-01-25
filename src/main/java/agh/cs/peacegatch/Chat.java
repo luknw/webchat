@@ -1,45 +1,66 @@
 package agh.cs.peacegatch;
 
 import org.eclipse.jetty.websocket.api.Session;
+import org.json.JSONException;
 import org.json.JSONObject;
+import spark.Spark;
 
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import static j2html.TagCreator.*;
-import static spark.Spark.*;
 
 /**
  * PeaceGatch
- * Created by luknw on 17.01.2017
+ * Created by luknw on 25.01.2017
  */
 
 public class Chat {
-    static Map<Session, String> userUsernameMap = new ConcurrentHashMap<>();
-    static int nextUserNumber = 1;
+    int nextUserNumber = 1;
+    private Map<String, List<User>> channels = new ConcurrentHashMap<>();
+    private Map<Session, User> userIdentityMap = new ConcurrentHashMap<>();
 
-    public static void main(String[] args) {
-        staticFileLocation("/public");
-        webSocket("/chat", ChatWebSocketHandler.class);
-        init();
+    public Map<Session, User> getUsers() {
+        return userIdentityMap;
     }
 
-    public static void broadcastMessage(String sender, String message) {
-        userUsernameMap.keySet().stream().filter(Session::isOpen).forEach(session -> {
+    void init() {
+        Spark.staticFileLocation("/public");
+        Spark.webSocket("/chat", new ChatWebSocketHandler(this));
+        Spark.init();
+    }
+
+    public void broadcastMessage(User sender, String message) {
+        List<User> userList = userIdentityMap.entrySet().stream()
+                .filter(e -> e.getKey().isOpen())
+                .filter(e -> e.getValue().getChannelName()
+                        .equals(sender.getChannelName()))
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toList());
+
+        List<String> userNames = userList.stream().map(User::getUserName).collect(Collectors.toList());
+
+        userList.forEach(user -> {
             try {
-                session.getRemote().sendString(String.valueOf(new JSONObject()
-                        .put("userMessage", createHtmlMessageFromSender(sender, message))
-                        .put("userList", userUsernameMap.values())
+                user.getSession().getRemote().sendString(String.valueOf(new JSONObject()
+                        .put("userMessage", createHtmlMessageFromSender(
+                                sender.getUserName(), message))
+                        .put("userList", userNames)
+                        .put("channelList", channels.keySet())
+                        .put("currentChannel", sender.getChannelName())
                 ));
-            } catch (Exception e) {
+            } catch (JSONException | IOException e) {
                 e.printStackTrace();
             }
         });
     }
 
-    private static String createHtmlMessageFromSender(String sender, String message) {
+    private String createHtmlMessageFromSender(String sender, String message) {
         return article().with(
                 b(sender + " says:"),
                 p(message),
