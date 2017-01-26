@@ -9,12 +9,12 @@ import org.eclipse.jetty.websocket.api.Session;
 
 public class User {
     private String userName;
-    private String channelName;
+    private String channel;
     private Session session;
 
-    public User(String userName, String channelName, Session session) {
+    public User(String userName, String channel, Session session) {
         this.userName = userName;
-        this.channelName = channelName;
+        this.channel = channel;
         this.session = session;
     }
 
@@ -22,8 +22,12 @@ public class User {
         return userName;
     }
 
-    public String getChannelName() {
-        return channelName;
+    public String getChannel() {
+        return channel;
+    }
+
+    public void setChannel(String channel) {
+        this.channel = channel;
     }
 
     public Session getSession() {

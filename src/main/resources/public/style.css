@@ -60,6 +60,10 @@ li {
     top: 11px;
 }
 
+#channellist {
+    vertical-align: middle;
+}
+
 #chat p {
     margin: 5px 0;
     font-weight: 300
