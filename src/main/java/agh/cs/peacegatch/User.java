@@ -4,33 +4,21 @@ import org.eclipse.jetty.websocket.api.Session;
 
 /**
  * PeaceGatch
- * Created by luknw on 25.01.2017
+ * Created by luknw on 05.02.2017
  */
 
-public class User {
-    private String userName;
-    private String channel;
-    private Session session;
+public interface User {
+    String getUserName();
 
-    public User(String userName, String channel, Session session) {
-        this.userName = userName;
-        this.channel = channel;
-        this.session = session;
-    }
+    Channel getChannel();
 
-    public String getUserName() {
-        return userName;
-    }
+    void setChannel(Channel channel);
 
-    public String getChannel() {
-        return channel;
-    }
+    Session getSession();
 
-    public void setChannel(String channel) {
-        this.channel = channel;
-    }
-
-    public Session getSession() {
-        return session;
-    }
+//    //todo Message support
+//    void associateMessage(String message);
+//
+//    //todo Message support
+//    void notifyMessage(String message);
 }

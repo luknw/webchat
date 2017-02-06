@@ -21,18 +21,18 @@ public class ChatWebSocketHandler {
     }
 
     @OnWebSocketConnect
-    public void onConnect(Session user) throws Exception {
-        context.addUser(user);
+    public void onConnect(Session session) /*throws Exception*/ {
+        context.startSession(session);
     }
 
     @OnWebSocketClose
-    public void onClose(Session user, int statusCode, String reason) {
-        context.removeUser(user);
+    public void onClose(Session session, int statusCode, String reason) {
+        context.endSession(session);
     }
 
     @OnWebSocketMessage
-    public void onMessage(Session user, String message) {
-        context.processMessage(user, message);
+    public void onMessage(Session session, String message) {
+        context.processMessage(session, message);
     }
 }
 

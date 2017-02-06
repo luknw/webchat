@@ -1,17 +1,11 @@
 package agh.cs.peacegatch;
 
 import org.eclipse.jetty.websocket.api.Session;
-import org.json.JSONException;
-import org.json.JSONObject;
 import spark.Spark;
 
-import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
-
-import static j2html.TagCreator.*;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * PeaceGatch
@@ -19,172 +13,126 @@ import static j2html.TagCreator.*;
  */
 
 public class Chat {
-    static final String DEFAULT_CHANNEL = "Chatbot";
-    static final String SERVER = "Server";
+    private static final String DEFAULT_CHANNEL_NAME = "Chatbot";
     private static final String NEW_USER = "newUser";
     private static final String USER = "User";
     private static final String TOKEN_SEPARATOR = ":";
     private static final String STATIC_FILE_LOCATION = "/public";
     private static final String WEBSOCKET_PATH = "/chat";
-    private static final String JOINED_THE_CHAT = " joined the chat";
-    private static final String LEFT_THE_CHAT = " left the chat";
+    private static final String JOINED_CHANNEL = " joined channel";
+    private static final String LEFT_CHANNEL = " left channel";
     private static final String SWITCH_CHANNEL = "switchChannel";
     private static final String ADD_CHANNEL = "addChannel";
-    private static final String TIMESTAMP = "timestamp";
-    private static final String SAYS = " says:";
-    private static final String HH_MM_SS = "HH:mm:ss";
     private static final char COMMAND_START = '/';
-    private static final String USER_MESSAGE = "userMessage";
-    private static final String USER_LIST = "userList";
-    private static final String CHANNEL_LIST = "channelList";
-    private static final String CURRENT_CHANNEL = "currentChannel";
-    private static final String CANNOT_BROADCAST_MESSAGE = "Cannot broadcast message";
 
-    private int nextUserNumber = 1;
-    private Map<String, List<User>> channels = new ConcurrentHashMap<>();
-    private Map<Session, User> userIdentityMap = new ConcurrentHashMap<>();
-    private List<Sniffer> sniffers = Collections.synchronizedList(new LinkedList<>());
+    private int nextUserNumber = 0;
+    private ConcurrentMap<Session, User> userMap = new ConcurrentHashMap<>();
+    private NameManagementStrategy userNameStrategy;
 
-    public void addSniffer(Sniffer sniffer) {
-        sniffers.add(sniffer);
-    }
+    private ConcurrentMap<String, Channel> channels = new ConcurrentHashMap<>();
+    private NameManagementStrategy channelNameStrategy;
 
-    public void removeSniffer(Sniffer sniffer) {
-        sniffers.remove(sniffer);
-    }
 
-    public Map<String, List<User>> getChannels() {
-        return channels;
-    }
+    public Chat(ConcurrentMap<Session, User> userMap, NameManagementStrategy userNameStrategy,
+                ConcurrentMap<String, Channel> channels, NameManagementStrategy channelNameStrategy) {
 
-    public String getDefaultChannel() {
-        Optional<Map.Entry<Session, User>> channel = userIdentityMap.entrySet().stream().findFirst();
-        if (!channel.isPresent()) {
-            channels.put(DEFAULT_CHANNEL, new LinkedList<>());
-        }
-        return DEFAULT_CHANNEL;
+        this.userMap = userMap;
+        this.userNameStrategy = userNameStrategy;
+        this.channels = channels;
+        this.channelNameStrategy = channelNameStrategy;
     }
 
     public Map<Session, User> getUsers() {
-        return userIdentityMap;
+        return userMap;
     }
 
-    private int getNextUserNumber() {
-        return nextUserNumber++;
+    public Map<String, Channel> getChannels() {
+        return channels;
     }
 
+    public Channel getDefaultChannel() {
+        return getChannels().values().stream()
+                .findFirst()
+                .orElse(new ChannelImpl(this, DEFAULT_CHANNEL_NAME, new ConcurrentHashMap<>()));
+    }
 
     void init() {
-        channels.put(DEFAULT_CHANNEL, new LinkedList<>());
+        if (channels.isEmpty()) {
+            Channel defaultChannel = getDefaultChannel();
+            channels.put(defaultChannel.getName(), defaultChannel);
+        }
 
         Spark.staticFileLocation(STATIC_FILE_LOCATION);
         Spark.webSocket(WEBSOCKET_PATH, new ChatWebSocketHandler(this));
         Spark.init();
     }
 
-    public void broadcastMessage(User sender, String message) {
-        List<User> userList = userIdentityMap.entrySet().stream()
-                .filter(e -> e.getKey().isOpen())
-                .filter(e -> e.getValue().getChannel()
-                        .equals(sender.getChannel()))
-                .map(Map.Entry::getValue)
-                .collect(Collectors.toList());
-
-        List<String> userNames = userList.stream().map(User::getUserName).collect(Collectors.toList());
-
-        userList.forEach(user -> {
-            try {
-                user.getSession().getRemote().sendString(String.valueOf(new JSONObject()
-                        .put(USER_MESSAGE, createHtmlMessageFromSender(
-                                sender.getUserName(), message))
-                        .put(USER_LIST, userNames)
-                        .put(CHANNEL_LIST, channels.keySet())
-                        .put(CURRENT_CHANNEL, sender.getChannel())
-                ));
-            } catch (JSONException | IOException e) {
-                System.err.println(CANNOT_BROADCAST_MESSAGE);
-                e.printStackTrace();
-            }
-        });
+    private int getNextUserNumber() {
+        return nextUserNumber++;
     }
 
-    private String createHtmlMessageFromSender(String sender, String message) {
-        return article().with(
-                b(sender + SAYS),
-                p(message),
-                span().withClass(TIMESTAMP).withText(new SimpleDateFormat(HH_MM_SS).format(new Date()))
-        ).render();
-    }
-
-
-    public void parseCommand(Session user, String message) {
+    public void processCommand(User user, String message) {
         String[] tokens = message.split(TOKEN_SEPARATOR);
         switch (tokens[0]) {
             case NEW_USER:
                 if (tokens.length >= 2) {
-                    newUserIdentity(user, tokens[1]);
+                    introduceUser(user.getSession(), tokens[1]);
                 }
                 break;
             case SWITCH_CHANNEL:
                 if (tokens.length >= 2) {
-                    switchChannel(user, tokens[1]);
+                    moveUserToChannel(user, getChannels().get(tokens[1]));
                 }
                 break;
             case ADD_CHANNEL:
                 if (tokens.length >= 2) {
-                    addChannel(user, tokens[1]);
+                    addChannel(user, new ChannelImpl(this, tokens[1], new ConcurrentHashMap<>()));
                 }
         }
     }
 
-    private void addChannel(Session user, String addedChannel) {
-        channels.put(addedChannel, new LinkedList<>());
-        switchChannel(user, addedChannel);
+    private void addChannel(User user, Channel channel) {
+        channels.put(channel.getName(), channel);
+        moveUserToChannel(user, channel);
     }
 
-    private void switchChannel(Session user, String targetChannel) {
-        User u = userIdentityMap.get(user);
+    private void moveUserToChannel(User user, Channel targetChannel) {
+        Channel oldChannel = user.getChannel();
 
-        channels.get(u.getChannel()).remove(u);
-        broadcastMessage(u, u.getUserName() + LEFT_THE_CHAT);
+        user.setChannel(targetChannel);
 
-        u.setChannel(targetChannel);
-        channels.get(targetChannel).add(u);
-        broadcastMessage(u, u.getUserName() + JOINED_THE_CHAT);
-    }
-
-    private void newUserIdentity(Session user, String username) {
-        User userIdentity = new User(username, getDefaultChannel(), user);
-        getUsers().remove(user);
-        getUsers().put(user, userIdentity);
-        getChannels().get(getDefaultChannel()).add(userIdentity);
-        broadcastMessage(userIdentity, username + JOINED_THE_CHAT);
-    }
-
-    public void addUser(Session user) {
-        String username = USER + getNextUserNumber();
-        userIdentityMap.put(user, new User(username, getDefaultChannel(), user));
-    }
-
-    public void removeUser(Session user) {
-        User userIdentity = userIdentityMap.get(user);
-
-        messageFromServer(userIdentity, userIdentity.getUserName() + LEFT_THE_CHAT);
-
-        userIdentityMap.remove(user);
-    }
-
-    public void processMessage(Session user, String message) {
-        if (message.charAt(0) == COMMAND_START) {
-            parseCommand(user, message.substring(1));
-        } else {
-            broadcastMessage(userIdentityMap.get(user), message);
+        if (oldChannel != null) {
+            oldChannel.broadcastMessage(user, user.getUserName() + LEFT_CHANNEL);
         }
-        sniffers.forEach(s -> s.sniffSniff(user, message));
+        if (targetChannel != null) {
+            targetChannel.broadcastMessage(user, user.getUserName() + JOINED_CHANNEL);
+        }
     }
 
-    private void messageFromServer(User originator, String message) {
-        User dummy = new User(Chat.SERVER, originator.getChannel(), originator.getSession());
-        broadcastMessage(dummy, message);
+    private void introduceUser(Session session, String userName) {
+        User user = new UserImpl(userName, null, session);
+        getUsers().put(session, user);
+        moveUserToChannel(user, getDefaultChannel());
+    }
+
+    public void startSession(Session session) {
+        User user = new UserImpl(USER + getNextUserNumber(), null, session);
+        userMap.put(session, user);
+    }
+
+    public void endSession(Session session) {
+        User user = getUsers().get(session);
+        user.setChannel(null);
+        userMap.remove(session);
+    }
+
+    public void processMessage(Session session, String message) {
+        User user = getUsers().get(session);
+
+        if (message.charAt(0) == COMMAND_START) {
+            processCommand(user, message.substring(1));
+        } else {
+            user.getChannel().broadcastMessage(user, message);
+        }
     }
 }
