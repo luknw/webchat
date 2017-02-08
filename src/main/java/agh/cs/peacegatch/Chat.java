@@ -1,138 +1,74 @@
 package agh.cs.peacegatch;
 
 import org.eclipse.jetty.websocket.api.Session;
-import spark.Spark;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.List;
 
-/**
- * PeaceGatch
- * Created by luknw on 25.01.2017
+/*
+  PeaceGatch
+  Created by luknw on 07.02.2017
  */
 
-public class Chat {
-    private static final String DEFAULT_CHANNEL_NAME = "Chatbot";
-    private static final String NEW_USER = "newUser";
-    private static final String USER = "User";
-    private static final String TOKEN_SEPARATOR = ":";
-    private static final String STATIC_FILE_LOCATION = "/public";
-    private static final String WEBSOCKET_PATH = "/chat";
-    private static final String JOINED_CHANNEL = " joined channel";
-    private static final String LEFT_CHANNEL = " left channel";
-    private static final String SWITCH_CHANNEL = "switchChannel";
-    private static final String ADD_CHANNEL = "addChannel";
-    private static final char COMMAND_START = '/';
+//todo implement differential updates
 
-    private int nextUserNumber = 0;
-    private ConcurrentMap<Session, User> userMap = new ConcurrentHashMap<>();
-    private NameManagementStrategy userNameStrategy;
+/**
+ * Manages Channels and user Sessions
+ */
+public interface Chat {
+    /**
+     * Provides the way to find User represented by the specified session
+     *
+     * @param session session to find user for
+     * @return User represented by the specified session
+     */
+    User findUserBySession(Session session);
 
-    private ConcurrentMap<String, Channel> channels = new ConcurrentHashMap<>();
-    private NameManagementStrategy channelNameStrategy;
+    /**
+     * Initiates User's connection, assigning him arbitrarily chosen defaults
+     *
+     * @param session Session associated with the new User
+     */
+    User startSession(Session session);
 
+    /**
+     * Ends User connection associated with the specified session
+     *
+     * @param session session to end
+     */
+    void endSession(Session session);
 
-    public Chat(ConcurrentMap<Session, User> userMap, NameManagementStrategy userNameStrategy,
-                ConcurrentMap<String, Channel> channels, NameManagementStrategy channelNameStrategy) {
+    /**
+     * @return Unmodifiable List of channels managed by this Chat
+     */
+    List<Channel> getChannels();
 
-        this.userMap = userMap;
-        this.userNameStrategy = userNameStrategy;
-        this.channels = channels;
-        this.channelNameStrategy = channelNameStrategy;
-    }
+    /**
+     * Adds the specified channel to the Chat.
+     * If the Chat already has this channel, nothing happens.
+     *
+     * @param channel channel to add
+     */
+    void addChannel(Channel channel);
 
-    public Map<Session, User> getUsers() {
-        return userMap;
-    }
+    /**
+     * Removes the specified channel from the Chat.
+     * If the Chat doesn't have this channel, nothing happens.
+     *
+     * @param channel channel to remove
+     */
+    void removeChannel(Channel channel);
 
-    public Map<String, Channel> getChannels() {
-        return channels;
-    }
+    /**
+     * @return Default channel for new users
+     */
+    Channel getDefaultChannel();
 
-    public Channel getDefaultChannel() {
-        return getChannels().values().stream()
-                .findFirst()
-                .orElse(new ChannelImpl(this, DEFAULT_CHANNEL_NAME, new ConcurrentHashMap<>()));
-    }
-
-    void init() {
-        if (channels.isEmpty()) {
-            Channel defaultChannel = getDefaultChannel();
-            channels.put(defaultChannel.getName(), defaultChannel);
-        }
-
-        Spark.staticFileLocation(STATIC_FILE_LOCATION);
-        Spark.webSocket(WEBSOCKET_PATH, new ChatWebSocketHandler(this));
-        Spark.init();
-    }
-
-    private int getNextUserNumber() {
-        return nextUserNumber++;
-    }
-
-    public void processCommand(User user, String message) {
-        String[] tokens = message.split(TOKEN_SEPARATOR);
-        switch (tokens[0]) {
-            case NEW_USER:
-                if (tokens.length >= 2) {
-                    introduceUser(user.getSession(), tokens[1]);
-                }
-                break;
-            case SWITCH_CHANNEL:
-                if (tokens.length >= 2) {
-                    moveUserToChannel(user, getChannels().get(tokens[1]));
-                }
-                break;
-            case ADD_CHANNEL:
-                if (tokens.length >= 2) {
-                    addChannel(user, new ChannelImpl(this, tokens[1], new ConcurrentHashMap<>()));
-                }
-        }
-    }
-
-    private void addChannel(User user, Channel channel) {
-        channels.put(channel.getName(), channel);
-        moveUserToChannel(user, channel);
-    }
-
-    private void moveUserToChannel(User user, Channel targetChannel) {
-        Channel oldChannel = user.getChannel();
-
-        user.setChannel(targetChannel);
-
-        if (oldChannel != null) {
-            oldChannel.broadcastMessage(user, user.getUserName() + LEFT_CHANNEL);
-        }
-        if (targetChannel != null) {
-            targetChannel.broadcastMessage(user, user.getUserName() + JOINED_CHANNEL);
-        }
-    }
-
-    private void introduceUser(Session session, String userName) {
-        User user = new UserImpl(userName, null, session);
-        getUsers().put(session, user);
-        moveUserToChannel(user, getDefaultChannel());
-    }
-
-    public void startSession(Session session) {
-        User user = new UserImpl(USER + getNextUserNumber(), null, session);
-        userMap.put(session, user);
-    }
-
-    public void endSession(Session session) {
-        User user = getUsers().get(session);
-        user.setChannel(null);
-        userMap.remove(session);
-    }
-
-    public void processMessage(Session session, String message) {
-        User user = getUsers().get(session);
-
-        if (message.charAt(0) == COMMAND_START) {
-            processCommand(user, message.substring(1));
-        } else {
-            user.getChannel().broadcastMessage(user, message);
-        }
-    }
+    //todo Message format and handling
+    /**
+     * Temporary message handling
+     *
+     * @param session Session of the User sending message
+     * @param message raw user message
+     */
+    void handleMessage(Session session, String message);
 }

@@ -1,17 +1,8 @@
 package agh.cs.peacegatch;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Collection;
-import java.util.Date;
+import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
-
-import static j2html.TagCreator.*;
 
 /**
  * PeaceGatch
@@ -20,87 +11,79 @@ import static j2html.TagCreator.*;
 
 public class ChannelImpl implements Channel {
     private static final String SERVER = "Server";
-    private static final String USER_MESSAGE = "userMessage";
-    private static final String USER_LIST = "userList";
-    private static final String CHANNEL_LIST = "channelList";
-    private static final String CURRENT_CHANNEL = "currentChannel";
-    private static final String CANNOT_BROADCAST_MESSAGE = "Cannot broadcast message";
-    private static final String TIMESTAMP = "timestamp";
-    private static final String SAYS = " says:";
-    private static final String HH_MM_SS = "HH:mm:ss";
+    private static final String JOINED_CHANNEL = " joined channel";
+    private static final String LEFT_CHANNEL = " left channel";
+
+    private final User asUser = new UserImpl(new NameImpl(SERVER), this, null);
 
     private Chat context;
+    private Name name;
+    private List<User> users;
 
-    private String name;
-
-    private ConcurrentMap<String, User> users;
-
-    public ChannelImpl(Chat context, String name, ConcurrentMap<String, User> users) {
+    public ChannelImpl(Chat context, Name name, List<User> users) {
         this.context = context;
         this.name = name;
         this.users = users;
     }
 
     @Override
-    public String getName() {
+    public Name getName() {
         return name;
     }
 
     @Override
     public void addUser(User user) {
-        users.put(user.getUserName(), user);
+        users.add(user);
+        messageFromServer(user.getUserName() + JOINED_CHANNEL);
     }
 
     @Override
     public void removeUser(User user) {
-        users.remove(user.getUserName(), user);
+        users.remove(user);
+        messageFromServer(user.getUserName() + LEFT_CHANNEL);
     }
 
     @Override
-    public Collection<User> getUsers() {
-        return users.values();
+    public List<User> getUsers() {
+        return Collections.unmodifiableList(users);
     }
 
-    @Override
-    public void broadcastMessage(User sender, String message) {
-        Collection<User> userCollection = users.values();
+    private void messageFromServer(String content) {
+        Message message = new MessageImpl(asUser, content);
+        broadcastMessage(message);
+    }
 
-        List<String> userNames =
-                userCollection.stream()
+    //todo differential updates
+    @Override
+    public void broadcastMessage(Message message) {
+        List<Name> userNames =
+                getUsers().stream()
                         .map(User::getUserName)
                         .collect(Collectors.toList());
 
-        List<String> channelNames =
-                context.getChannels().values().stream()
+        List<Name> channelNames =
+                context.getChannels().stream()
                         .map(Channel::getName)
                         .collect(Collectors.toList());
 
-        userCollection.forEach(user -> {
-            try {
-                user.getSession().getRemote().sendString(String.valueOf(new JSONObject()
-                        .put(USER_MESSAGE, createHtmlMessageFromSender(
-                                sender.getUserName(), message))
-                        .put(USER_LIST, userNames)
-                        .put(CHANNEL_LIST, channelNames)
-                        .put(CURRENT_CHANNEL, getName())
-                ));
-            } catch (JSONException | IOException e) {
-                System.err.println(CANNOT_BROADCAST_MESSAGE);
-                e.printStackTrace();
-            }
-        });
+        getUsers().forEach(user -> user.receiveMessage(message, userNames, channelNames));
     }
 
-    public String createHtmlMessageFromSender(String sender, String message) {
-        return article().with(
-                b(sender + SAYS),
-                p(message),
-                span().withClass(TIMESTAMP).withText(new SimpleDateFormat(HH_MM_SS).format(new Date()))
-        ).render();
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        ChannelImpl other = (ChannelImpl) o;
+
+        return (context != null ? context.equals(other.context) : other.context == null)
+                && (name != null ? name.equals(other.name) : other.name == null);
     }
 
-    private void messageFromServer(User originator, String message) {
-        User dummy = new UserImpl(SERVER, this, originator.getSession());
-        broadcastMessage(dummy, message);
+    @Override
+    public int hashCode() {
+        int result = context != null ? context.hashCode() : 0;
+        result = 31 * result + (name != null ? name.hashCode() : 0);
+        return result;
     }
 }

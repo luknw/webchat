@@ -9,8 +9,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class Main {
     public static void main(String[] args) {
-        Chat c = new Chat(new ConcurrentHashMap<>(), new UniqueNameStrategy(),
-                new ConcurrentHashMap<>(), new UniqueNameStrategy());
+        ChatImpl c = new ChatImpl(new ConcurrentHashMap<>(), new UniqueNameManager(),
+                new ConcurrentHashMap<>(), new UniqueNameManager());
 //        c.addSniffer(new Chatbot("Cantor", c, c.getDefaultChannel()));
         c.init();
     }

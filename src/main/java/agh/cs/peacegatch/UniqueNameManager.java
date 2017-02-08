@@ -9,12 +9,12 @@ import java.util.Set;
  * Created by luknw on 01.02.2017
  */
 
-public class UniqueNameStrategy implements NameManagementStrategy {
+public class UniqueNameManager implements NameManager {
 
-    private Set<String> names = new ConcurrentHashSet<>();
+    private Set<Name> names = new ConcurrentHashSet<>();
 
     @Override
-    public boolean addName(String name) {
+    public boolean addName(Name name) {
         if (names.contains(name)) {
             return false;
         }
@@ -24,12 +24,12 @@ public class UniqueNameStrategy implements NameManagementStrategy {
     }
 
     @Override
-    public boolean removeName(String name) {
+    public boolean removeName(Name name) {
         return names.remove(name);
     }
 
     @Override
-    public boolean isValid(String name) {
+    public boolean isValid(Name name) {
         return !names.contains(name);
     }
 }

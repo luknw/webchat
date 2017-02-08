@@ -13,7 +13,6 @@ import org.eclipse.jetty.websocket.api.annotations.WebSocket;
 
 @WebSocket
 public class ChatWebSocketHandler {
-
     private final Chat context;
 
     public ChatWebSocketHandler(Chat context) {
@@ -21,7 +20,7 @@ public class ChatWebSocketHandler {
     }
 
     @OnWebSocketConnect
-    public void onConnect(Session session) /*throws Exception*/ {
+    public void onConnect(Session session) {
         context.startSession(session);
     }
 
@@ -30,9 +29,10 @@ public class ChatWebSocketHandler {
         context.endSession(session);
     }
 
+    //todo new Message format and a proper class for interpreting
     @OnWebSocketMessage
     public void onMessage(Session session, String message) {
-        context.processMessage(session, message);
+        context.handleMessage(session, message);
     }
 }
 
